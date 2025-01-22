@@ -1,0 +1,7 @@
+apiVersion: v2
+name: ecorp-app
+description: A Helm chart for running the ecorp-app
+version: 0.1.0
+type: application
+
+dependencies: []
