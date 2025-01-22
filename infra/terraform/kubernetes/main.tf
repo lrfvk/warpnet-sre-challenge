@@ -53,7 +53,7 @@ module "gke" {
   node_pools = [
     {
       name         = "default-pool-001"
-      machine_type = "e2-micro"
+      machine_type = "e2-small"
       min_count    = 1
       max_count    = 3
       disk_size_gb = 10

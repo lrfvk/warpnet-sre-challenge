@@ -1,0 +1,25 @@
+image:
+  repository: lrfvk/ecorpapp
+  tag: latest
+  pullPolicy: IfNotPresent
+
+service:
+  type: ClusterIP
+  port: 5050
+
+resources:
+  limits:
+    memory: 128Mi
+  requests:
+    cpu: 10m
+    memory: 128Mi
+
+ingress:
+  enabled: true
+  className: "nginx" 
+  annotations: {}
+  host: "ecorp.vankootenlabs.com"
+
+  # TLS-specific config
+  tls: true
+  tlsSecretName: "ecorp-app-tls-secret"

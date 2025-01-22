@@ -1,0 +1,4 @@
+prod:
+  enabled: true
+  email: admin@vankootenlabs.com
+  server: https://acme-v02.api.letsencrypt.org/directory
