@@ -43,7 +43,7 @@ jobs:
       - name: Build and push Docker image
         uses: docker/build-push-action@v3
         with:
-          context: .
+          context: app/.
           push: true
           # Use your Docker Hub username/org in the image tag
           tags: ${{ secrets.DOCKERHUB_USERNAME }}/ecorpapp:latest
