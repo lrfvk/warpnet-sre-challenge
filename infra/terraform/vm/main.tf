@@ -43,16 +43,16 @@ resource "google_compute_instance" "ecorp_vm" {
   EOF
 }
 
-resource "google_compute_firewall" "allow_http" {
-  name    = "ecorp-allow-http"
+resource "google_compute_firewall" "allow_http_https" {
+  name    = "ecorp-allow-http-https"
   network = "default"
 
   allow {
     protocol = "tcp"
-    ports    = ["80"]
+    ports    = ["80", "443"]
   }
 
-  # Open port 80 to the world
+  # Open port 80 and 443 to the world
   source_ranges = ["0.0.0.0/0"]
 
   # Target instances tagged with "http-server"
