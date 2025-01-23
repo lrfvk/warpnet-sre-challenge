@@ -27,7 +27,7 @@ jobs:
   # 2. Docker Build & Push Job
   docker_build_and_push:
     # This job depends on tests passing
-    needs: [lint_and_test]
+    needs: [install]
     runs-on: ubuntu-latest
 
     steps:

@@ -65,7 +65,6 @@ def login():
             #   to the user (like “incorrect username or password”).
             return redirect(url_for("index"))
     # ^ There's no CSRF protection on this login form.
-    #   Flask's session cookies are being used, but additional security measures should be considered.
     return render_template("login.html")
 
 
