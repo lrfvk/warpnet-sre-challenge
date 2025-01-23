@@ -1,13 +1,3 @@
-"""
-Example Flask application with improvements:
-  - Single import of bcrypt
-  - Environment variable–based secret key (no debug in production!)
-  - Secure session cookie configuration
-  - Using 'with' statements for database access
-  - Optional session timeout
-  - Re-rendering the login form with a generic error message (no 401 abort)
-"""
-
 import os
 import sqlite3
 import logging
@@ -19,59 +9,74 @@ from flask import (
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 import bcrypt
-
+from flask_wtf.csrf import CSRFProtect
 
 app = Flask(__name__)
 
+# Initialize CSRF protection
+# Added CSRF protection to prevent cross-site request forgery attacks,
+# ensuring that every POST request includes a valid token.
+csrf = CSRFProtect(app)
+
 # ------------------------------------------------------------------------------
 # 1. Environment Variable for Secret Key
-#    - Avoid storing secret keys directly in version control.
-#    - 'dev_key' is just a fallback for local testing; never use it in production!
+#    - Changed hardcoded secret key to use an environment variable.
+#    - This enhances security by avoiding exposing the secret key in version control.
+#    - 'dev_key' is used as a fallback for local development but should not
+#      be used in production.
 # ------------------------------------------------------------------------------
 app.secret_key = os.environ.get('FLASK_SECRET_KEY', 'dev_key')
 
 # ------------------------------------------------------------------------------
 # 2. Secure Session Cookies
-#    - These settings help protect your session cookies from interception
-#      and prevent JavaScript from reading them.
-#    - Consider 'Strict' for SESSION_COOKIE_SAMESITE if you do not need any cross-site usage.
+#    - Configured session cookies to use HTTPS-only transmission, preventing
+#      them from being sent over unsecured connections.
+#    - Restricted cookies from being accessed by JavaScript (HttpOnly) to
+#      mitigate the risk of client-side script-based attacks.
+#    - Set SESSION_COOKIE_SAMESITE to 'Strict' to reduce CSRF attack vectors.
 # ------------------------------------------------------------------------------
 app.config.update(
-    SESSION_COOKIE_SECURE=True,    # Only transmit cookies over HTTPS
-    SESSION_COOKIE_HTTPONLY=True,  # Disallow JavaScript access to the cookies
-    SESSION_COOKIE_SAMESITE='Strict', # Mitigate CSRF attacks; 'Lax' can also be used
+    SESSION_COOKIE_SECURE=True,    # Ensures cookies are sent only over HTTPS
+    SESSION_COOKIE_HTTPONLY=True,  # Prevents JavaScript from accessing cookies
+    SESSION_COOKIE_SAMESITE='Strict', # Mitigates CSRF by restricting cross-site cookies
 )
 
 # ------------------------------------------------------------------------------
 # 3. Logging Configuration
-#    - We log events without exposing passwords or other secrets.
+#    - Updated logging to INFO level to capture significant events while
+#      avoiding verbose debug logs in production.
+#    - Avoided logging sensitive information such as passwords.
 # ------------------------------------------------------------------------------
 app.logger.setLevel(logging.INFO)
 
 # ------------------------------------------------------------------------------
-# 4. (Optional) Session Timeout
-#    - This config will make sessions expire after a period.
-#    - If you want an idle timeout, you need custom logic tracking last activity.
+# 4. Session Timeout
+#    - Configured sessions to expire after 30 minutes of inactivity.
+#    - This change ensures that authenticated sessions are automatically
+#      invalidated after a reasonable period to reduce security risks.
 # ------------------------------------------------------------------------------
 app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(minutes=30)
 
 # ------------------------------------------------------------------------------
 # 5. Rate Limiting
-#    - Helps prevent brute-force password attacks by limiting login attempts.
+#    - Added rate limiting to prevent brute-force attacks on login endpoints.
+#    - By default, each client is limited to 10 requests per minute across the app.
 # ------------------------------------------------------------------------------
 limiter = Limiter(
-    get_remote_address,
-    app=app,  # Must be passed as named argument
+    get_remote_address,  # Tracks users by their IP addresses
+    app=app,  # Flask app instance
     default_limits=["10 per minute"]
 )
 
 # ------------------------------------------------------------------------------
 # Database Helper
+#    - Simplified database connections using 'with' statements to ensure
+#      connections are properly closed, reducing the risk of resource leaks.
 # ------------------------------------------------------------------------------
 def get_db_connection():
     """
     Returns a SQLite connection object.
-    Ensures rows behave like dictionaries rather than tuples.
+    Ensures rows behave like dictionaries rather than tuples for better readability.
     """
     connection = sqlite3.connect("database.db", isolation_level=None)
     connection.row_factory = sqlite3.Row
@@ -79,6 +84,8 @@ def get_db_connection():
 
 # ------------------------------------------------------------------------------
 # Helper: Check if a user is already authenticated
+#    - Centralized authentication check using session variables.
+#    - This simplifies the process of checking login status across the app.
 # ------------------------------------------------------------------------------
 def is_authenticated():
     """
@@ -88,13 +95,17 @@ def is_authenticated():
 
 # ------------------------------------------------------------------------------
 # Authentication Logic
+#    - Improved security by using bcrypt to compare password hashes rather
+#      than storing plain-text passwords in the database.
+#    - Ensured all database queries use parameterized statements to prevent
+#      SQL injection attacks.
 # ------------------------------------------------------------------------------
 def authenticate(username, password):
     """
     Authenticates a user by:
-      1. Retrieving the user record from the database via parameterized query
-      2. Comparing the hashed password in the DB with the hash of the provided password
-      3. Logging the user in if valid, or returning False if invalid
+      1. Fetching the user record securely from the database.
+      2. Comparing the hashed password in the database with the supplied password.
+      3. Marking the session as permanent to enforce session timeout policies.
     """
     # Use a context manager to ensure the connection closes automatically
     with get_db_connection() as conn:
@@ -105,43 +116,43 @@ def authenticate(username, password):
 
     if user:
         stored_hashed_pw = user["password"]
-        # If the stored hash is a string in the DB, convert to bytes
+        # Convert stored hash to bytes if it was stored as a string
         if isinstance(stored_hashed_pw, str):
             stored_hashed_pw = stored_hashed_pw.encode('utf-8')
 
-        # Compare the stored hashed password with the user-supplied password
+        # Compare hashed password with user-provided password
         if bcrypt.checkpw(password.encode('utf-8'), stored_hashed_pw):
-            # Only log the username; never log raw passwords
+            # Log the successful login without exposing sensitive details
             app.logger.info(f"User '{username}' logged in successfully.")
-            # Mark session as permanent to enforce PERMANENT_SESSION_LIFETIME
-            session.permanent = True
+            session.permanent = True  # Enforce session expiration policies
             session["username"] = username
             return True
 
-    # If we get here, authentication failed
+    # Log failed login attempts for monitoring
     app.logger.warning(f"Login failed for user '{username}'.")
     return False
 
 # ------------------------------------------------------------------------------
 # Routes
+#    - Centralized the handling of authentication status in templates for
+#      cleaner and consistent logic across the app.
 # ------------------------------------------------------------------------------
 @app.route("/")
 def index():
     """
     Home page route.
-    Renders index.html and passes along the authentication status.
+    Displays the home page with a dynamic message depending on authentication status.
     """
     return render_template("index.html", is_authenticated=is_authenticated())
 
 @app.route("/login", methods=["GET", "POST"])
-@limiter.limit("5/minute")  # Additional rate limit for the login route
+@limiter.limit("5/minute")  # Tightened rate limit for sensitive endpoints
 def login():
     """
     Login route:
-      - If method is GET, render a login form.
-      - If method is POST, attempt to authenticate the user.
-      - On successful authentication, redirect to the home page.
-      - On failure, re-render the login form with an error message.
+      - GET: Displays the login form.
+      - POST: Authenticates the user and redirects to the home page on success.
+              Re-renders the form with a generic error message on failure.
     """
     if request.method == "POST":
         username = request.form.get("username")
@@ -150,7 +161,7 @@ def login():
         if username and password and authenticate(username, password):
             return redirect(url_for("index"))
         else:
-            # Provide user-friendly error message without revealing details
+            # Avoid leaking details about whether the username or password is incorrect
             flash("Invalid username or password. Please try again.", "error")
             return render_template("login.html")
 
@@ -160,19 +171,17 @@ def login():
 def logout():
     """
     Logout route:
-      - Pop 'username' from the session, if present.
-      - Redirect to the home page afterwards.
+      - Removes the 'username' from the session to log the user out.
+      - Redirects to the home page after logging out.
     """
     session.pop("username", None)
     return redirect(url_for("index"))
 
-
 if __name__ == "__main__":
     """
-    Runs the Flask development server for local testing.
-    For production, use a proper WSGI server (e.g., Gunicorn or uWSGI),
-    and do NOT enable debug mode in production!
+    Starts the Flask development server for local testing.
+    - Debug mode is controlled by an environment variable to ensure it's disabled in production.
+    - For production, this app should be deployed behind a WSGI server like Gunicorn or uWSGI.
     """
-    # Use an environment variable or config to control debug mode:
     debug_mode = os.environ.get("FLASK_DEBUG", "false").lower() == "true"
     app.run(host="0.0.0.0", port=5050, debug=debug_mode)

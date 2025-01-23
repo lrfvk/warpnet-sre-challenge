@@ -7,8 +7,8 @@ on:
     branches: [ "main" ]
 
 jobs:
-  # 1. Lint and Test Job
-  lint_and_test:
+  # 1. Install requirements
+  install:
     runs-on: ubuntu-latest
     steps:
       - name: Check out the code

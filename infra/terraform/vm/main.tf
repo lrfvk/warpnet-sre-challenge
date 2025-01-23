@@ -1,47 +1,60 @@
-# main.tf
+terraform {
+  required_providers {
+    google = {
+      source  = "hashicorp/google"
+      version = "~> 6.16.0"
+    }
+  }
+  required_version = ">= 1.0"
+}
+
 provider "google" {
   project = var.project_id
   region  = var.region
+  zone    = var.zone
 }
 
-resource "google_compute_instance" "warpnet_vm" {
-  name         = var.instance_name
+resource "google_compute_instance" "ecorp_vm" {
+  name         = "ecorp-vm"
   machine_type = var.machine_type
-  zone         = var.zone
 
+  # Tag for firewall rule
+  tags = ["http-server"]
+
+  # Use Container-Optimized OS
   boot_disk {
     initialize_params {
-      image = var.boot_image
-      size  = 10
+      image = "cos-cloud/cos-stable"
     }
   }
 
+  # Attach to default network with ephemeral external IP
   network_interface {
     network = "default"
-
-    access_config {
-      # Creates an external IP address
-    }
+    access_config {}
   }
 
-  metadata_startup_script = <<-EOT
+  # Startup script to run Docker container
+  metadata_startup_script = <<-EOF
     #!/bin/bash
-    apt-get update
-    apt-get install -y python3 python3-pip
-    pip3 install flask
-
-    # Copy app code from metadata or a storage bucket (example below uses metadata)
-    echo "${var.flask_app_code}" > /app/app.py
-
-    # Run the Flask application
-    python3 /app/app.py &
-  EOT
+    # On Container-Optimized OS, Docker is already installed.
+    # Just pull and run your container on port 80:
+    docker run -d -p 80:5050 lrfvk/ecorpapp
+  EOF
 }
 
-output "vm_external_ip" {
-  value = google_compute_instance.warpnet_vm.network_interface[0].access_config[0].nat_ip
-}
+resource "google_compute_firewall" "allow_http" {
+  name    = "ecorp-allow-http"
+  network = "default"
 
-output "vm_name" {
-  value = google_compute_instance.warpnet_vm.name
+  allow {
+    protocol = "tcp"
+    ports    = ["80"]
+  }
+
+  # Open port 80 to the world
+  source_ranges = ["0.0.0.0/0"]
+
+  # Target instances tagged with "http-server"
+  target_tags = ["http-server"]
 }

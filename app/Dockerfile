@@ -1,7 +1,7 @@
 # Start from a lightweight Python base image
 FROM python:3.10-slim
 
-# Set environment variables: these are examples; override them in production
+# Set environment variables
 ENV FLASK_SECRET_KEY="192b9bdd22ab9ed4d12e236c78afcb9a393ec15f71bbf5dc987d54727823bcbf" \
     FLASK_DEBUG="false" \
     PYTHONUNBUFFERED=1
